@@ -19,7 +19,7 @@ validation_size = channel_validation.shape[0]
 # ##### 训练数据的生成
 
 # %%
-def training_gen(bs, SNRdb=20):
+def training_gen(CP, P, pilotCarriers, dataCarriers, pilotValue, bs, SNRdb=20):
     while True:
         input_samples_train = []
         input_labels_train = []
@@ -29,7 +29,14 @@ def training_gen(bs, SNRdb=20):
             )
             channel_response = channel_train[np.random.randint(0, train_size)]
             signal_output, para = ofdm_simulate(
-                data_bits, channel_response, SNRdb
+                CP,
+                P,
+                pilotCarriers,
+                dataCarriers,
+                pilotValue,
+                data_bits,
+                channel_response,
+                SNRdb,
             )
             input_labels_train.append(data_bits[16:32])
             input_samples_train.append(signal_output)
@@ -40,7 +47,9 @@ def training_gen(bs, SNRdb=20):
 # ##### 验证数据的生成
 
 # %%
-def validation_gen(bs, SNRdb=20):
+def validation_gen(
+    CP, P, pilotCarriers, dataCarriers, pilotValue, bs, SNRdb=20
+):
     while True:
         input_samples_validation = []
         input_labels_validation = []
@@ -52,7 +61,14 @@ def validation_gen(bs, SNRdb=20):
                 np.random.randint(0, validation_size)
             ]
             signal_output, para = ofdm_simulate(
-                data_bits, channel_response, SNRdb
+                CP,
+                P,
+                pilotCarriers,
+                dataCarriers,
+                pilotValue,
+                data_bits,
+                channel_response,
+                SNRdb,
             )
             input_labels_validation.append(data_bits[16:32])
             input_samples_validation.append(signal_output)

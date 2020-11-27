@@ -14,20 +14,26 @@ import tensorflow as tf
 
 # %%
 K = 64
-CP = K // 4
-P = 64
-allCarriers = np.arange(K)  # indices of all subcarriers ([0, 1, ... K-1])
-
-if P < K:
-    pilotCarriers = allCarriers[:: K // P]  # Pilots is every (K/P)th carrier.
-    dataCarriers = np.delete(allCarriers, pilotCarriers)
-else:  # K=P
-    pilotCarriers = allCarriers
-    dataCarriers = []
 
 mu = 2
 payloadBits_per_OFDM = K * mu
 SNRdb = 20
+
+
+def get_carriers(P):
+    allCarriers = np.arange(K)  # indices of all subcarriers ([0, 1, ... K-1])
+
+    if P < K:
+        pilotCarriers = allCarriers[
+            :: K // P
+        ]  # Pilots is every (K/P)th carrier.
+        dataCarriers = np.delete(allCarriers, pilotCarriers)
+    else:  # K=P
+        pilotCarriers = allCarriers
+        dataCarriers = []
+
+    return pilotCarriers, dataCarriers
+
 
 # %% [markdown]
 # ##### 神经网络中参数的设置
@@ -53,16 +59,10 @@ def Modulation(bits):
 # ##### 64导频序列值的获取
 
 # %%
-Pilot_file_name = "Pilot_" + str(P)
-if os.path.isfile(Pilot_file_name):
-    print("Load Training Pilots txt")
-    # load file
-    pilots_bits = np.loadtxt(Pilot_file_name, delimiter=",")
-else:
-    # write file
-    pilots_bits = np.random.binomial(n=1, p=0.5, size=(K * mu,))
-    np.savetxt(Pilot_file_name, pilots_bits, delimiter=",")
-pilotValue = Modulation(pilots_bits)
+def get_pilot_value(P):
+    pilots_bits = np.loadtxt("Pilot_" + str(P), delimiter=",")
+    return Modulation(pilots_bits)
+
 
 # %% [markdown]
 # ##### 逆快速傅里叶变换函数
@@ -76,7 +76,7 @@ def IDFT(OFDM_data):
 # ##### 加循环前缀（CP）
 
 # %%
-def addCP(OFDM_time):
+def addCP(CP, OFDM_time):
     cp = OFDM_time[-CP:]  # take the last CP samples ...
     return np.hstack([cp, OFDM_time])  # ... and add them to the beginning
 
@@ -100,7 +100,7 @@ def channel(signal, channelResponse, SNRdb):
 # ##### 去掉循环前缀
 
 # %%
-def removeCP(signal):
+def removeCP(CP, signal):
     return signal[CP : (CP + K)]
 
 
@@ -116,7 +116,16 @@ def DFT(OFDM_RX):
 # ##### 导频符号和原始发送符号共同经过一次模拟获得接收符号，该获得的接收符号作为训练输入
 
 # %%
-def ofdm_simulate(codeword, channelResponse, SNRdb):
+def ofdm_simulate(
+    CP,
+    P,
+    pilotCarriers,
+    dataCarriers,
+    pilotValue,
+    codeword,
+    channelResponse,
+    SNRdb,
+):
     # 导频符号
     data_bits = np.random.binomial(n=1, p=0.5, size=(2 * (K - P),))
     QAM = Modulation(data_bits)
@@ -124,10 +133,10 @@ def ofdm_simulate(codeword, channelResponse, SNRdb):
     OFDM_data[pilotCarriers] = pilotValue
     OFDM_data[dataCarriers] = QAM
     OFDM_time = IDFT(OFDM_data)
-    OFDM_withCP = addCP(OFDM_time)
+    OFDM_withCP = addCP(CP, OFDM_time)
     OFDM_TX = OFDM_withCP
     OFDM_RX = channel(OFDM_TX, channelResponse, SNRdb)
-    OFDM_RX_noCP = removeCP(OFDM_RX)
+    OFDM_RX_noCP = removeCP(CP, OFDM_RX)
     OFDM_RX_noCP = DFT(OFDM_RX_noCP)
 
     # 发送信息符号
@@ -136,9 +145,9 @@ def ofdm_simulate(codeword, channelResponse, SNRdb):
     symbol[np.arange(K)] = codeword_qam
     OFDM_data_codeword = symbol
     OFDM_time_codeword = IDFT(OFDM_data_codeword)
-    OFDM_withCP_cordword = addCP(OFDM_time_codeword)
+    OFDM_withCP_cordword = addCP(CP, OFDM_time_codeword)
     OFDM_RX_codeword = channel(OFDM_withCP_cordword, channelResponse, SNRdb)
-    OFDM_RX_noCP_codeword = removeCP(OFDM_RX_codeword)
+    OFDM_RX_noCP_codeword = removeCP(CP, OFDM_RX_codeword)
     OFDM_RX_noCP_codeword = DFT(OFDM_RX_noCP_codeword)
 
     # 获得的接收信号作为神经网络的输入
